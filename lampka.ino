@@ -7,7 +7,7 @@
 
 // Change this to be at least as long as your pixel string (too long will work fine, just be a little slower)
 
-#define PIXELS 4  // Number of pixels in the string
+#define PIXELS 8  // Number of pixels in the string
 
 // These values depend on which pin your string is connected to and what board you are using 
 // More info on how to find these at http://www.arduino.cc/en/Reference/PortManipulation
@@ -161,19 +161,6 @@ void show() {
   
 */
 
-
-// Display a single color on the whole string
-
-void showColor( unsigned char r , unsigned char g , unsigned char b ) {
-  
-  cli();  
-  for( int p=0; p<PIXELS; p++ ) {
-    sendPixel( r , g , b );
-  }
-  sei();
-  show();
-  
-}
 
 /*
 // Fill the dots one after the other with a color
@@ -336,7 +323,6 @@ void detonate( unsigned char r , unsigned char g , unsigned char b , unsigned in
 
 
 ////////////////////////////////////////////////////////////////////////////////////
-#define FORCE_REFERENCE(var)  asm volatile( "" : : "r" (var) )
 #define K255 255
 #define K171 171
 #define K85  85
@@ -355,11 +341,6 @@ static inline unsigned char scale8( unsigned char i, unsigned char scale)
     unsigned char cnt=0x80;
     asm volatile(
         "LOOP_%=:                             \n\t"
-        /*"  sbrc %[scale], 0             \n\t"
-        "  add %[work], %[i]            \n\t"
-        "  ror %[work]                  \n\t"
-        "  lsr %[scale]                 \n\t"
-        "  clc                          \n\t"*/
         "  sbrc %[scale], 0             \n\t"
         "  add %[work], %[i]            \n\t"
         "  ror %[work]                  \n\t"
@@ -516,7 +497,7 @@ void hsv2rgb_rainbow( unsigned char hue, unsigned char sat, unsigned char val, u
     
     unsigned char third = scale8( offset8, (256 / 3));
         
-    unsigned char r, g, b;
+    memset(colors, 0, sizeof(colors));
     
     if( ! (hue & 0x80) ) {
         // 0XX
@@ -526,26 +507,20 @@ void hsv2rgb_rainbow( unsigned char hue, unsigned char sat, unsigned char val, u
             if( ! (hue & 0x20) ) {
                 // 000
                 //case 0: // R -> O
-                r = K255 - third;
-                g = third;
-                b = 0;
-                FORCE_REFERENCE(b);
+                colors[0] = K255 - third;
+                colors[1] = third;
             } else {
                 // 001
                 //case 1: // O -> Y
                 if( Y1 ) {
-                    r = K171;
-                    g = K85 + third ;
-                    b = 0;
-                    FORCE_REFERENCE(b);
+                    colors[0] = K171;
+                    colors[1] = K85 + third ;
                 }
                 if( Y2 ) {
-                    r = K171 + third;
+                    colors[0] = K171 + third;
                     //unsigned char twothirds = (third << 1);
                     unsigned char twothirds = scale8( offset8, ((256 * 2) / 3));
-                    g = K85 + twothirds;
-                    b = 0;
-                    FORCE_REFERENCE(b);
+                    colors[1] = K85 + twothirds;
                 }
             }
         } else {
@@ -555,26 +530,19 @@ void hsv2rgb_rainbow( unsigned char hue, unsigned char sat, unsigned char val, u
                 // 010
                 //case 2: // Y -> G
                 if( Y1 ) {
-                    //unsigned char twothirds = (third << 1);
                     unsigned char twothirds = scale8( offset8, ((256 * 2) / 3));
-                    r = K171 - twothirds;
-                    g = K171 + third;
-                    b = 0;
-                    FORCE_REFERENCE(b);
+                    colors[0] = K171 - twothirds;
+                    colors[1] = K171 + third;
                 }
                 if( Y2 ) {
-                    r = K255 - offset8;
-                    g = K255;
-                    b = 0;
-                    FORCE_REFERENCE(b);
+                    colors[0] = K255 - offset8;
+                    colors[1] = K255;
                 }
             } else {
                 // 011
                 // case 3: // G -> A
-                r = 0;
-                FORCE_REFERENCE(r);
-                g = K255 - third;
-                b = third;
+                colors[1] = K255 - third;
+                colors[2] = third;
             }
         }
     } else {
@@ -585,73 +553,59 @@ void hsv2rgb_rainbow( unsigned char hue, unsigned char sat, unsigned char val, u
             if( ! ( hue & 0x20) ) {
                 // 100
                 //case 4: // A -> B
-                r = 0;
-                FORCE_REFERENCE(r);
-                //unsigned char twothirds = (third << 1);
+                //r = 0;
                 unsigned char twothirds = scale8( offset8, ((256 * 2) / 3));
-                g = K171 - twothirds;
-                b = K85  + twothirds;
-
+                colors[1] = K171 - twothirds;
+                colors[2] = K85  + twothirds;
             } else {
                 // 101
                 //case 5: // B -> P
-                r = third;
-                g = 0;
-                FORCE_REFERENCE(g);
-                b = K255 - third;
-
+                colors[0] = third;
+                colors[2] = K255 - third;
             }
         } else {
             if( !  (hue & 0x20)  ) {
                 // 110
                 //case 6: // P -- K
-                r = K85 + third;
-                g = 0;
-                FORCE_REFERENCE(g);
-                b = K171 - third;
-
+                colors[0] = K85 + third;
+                colors[2] = K171 - third;
             } else {
                 // 111
                 //case 7: // K -> R
-                r = K171 + third;
-                g = 0;
-                FORCE_REFERENCE(g);
-                b = K85 - third;
-
+                colors[0] = K171 + third;
+                colors[2] = K85 - third;
             }
         }
     }
     
     // This is one of the good places to scale the green down,
     // although the client can scale green down as well.
-    if( G2 ) g = g >> 1;
-    if( Gscale ) g = scale8_video_LEAVING_R1_DIRTY( g, Gscale);
+    if( G2 ) colors[1] = colors[1] >> 1;
+    if( Gscale ) colors[1] = scale8_video_LEAVING_R1_DIRTY( colors[1], Gscale);
     
+    /* commenting out saturation and brightness, keep them at max
     // Scale down colors if we're desaturated at all
     // and add the brightness_floor to r, g, and b.
     if( sat != 255 ) {
 
-        nscale8x3_video( r, g, b, sat);
+        nscale8x3_video( colors[0], colors[1], colors[2], sat);
 
         unsigned char desat = 255 - sat;
         desat = scale8( desat, desat);
         
-        unsigned char brightness_floor = desat;
-        r += brightness_floor;
-        g += brightness_floor;
-        b += brightness_floor;
+        //unsigned char brightness_floor = desat;
+        colors[0] += desat;
+        colors[1] += desat;
+        colors[2] += desat;
     }
 
     // Now scale everything down if we're at value < 255.
     if( val != 255 ) {
         
         val = scale8_video_LEAVING_R1_DIRTY( val, val);
-        nscale8x3_video( r, g, b, val);
+        nscale8x3_video( colors[0], colors[1], colors[2], val);
     }
-    
-    colors[0] = r;
-    colors[1] = g;
-    colors[2] = b;
+    */
 }
 
 ////////////////////////////////////////////////////////////////////////////////////
@@ -661,9 +615,11 @@ inline void interruptSetup() {
     const unsigned char buttonPin=3;
     //cli(); //disable interrupts
     // initialize the pushbutton pin as an input:
-    pinMode(buttonPin, INPUT);
-
-    MCUCR = 0; //The low level of INT0 generates an interrupt request.
+    // actually they are all inputs by default, so do nothing
+    //DDRB |= _BV(buttonPin);
+    
+    //looks like it's 0 by default
+    //MCUCR = 0; //The low level of INT0 generates an interrupt request.
     //MCUCR = 1; //Any logical change on INT0 generates an interrupt request.
     //MCUCR = 2; //The falling edge of INT0 generates an interrupt request.
     //MCUCR = 3; //The rising edge of INT0 generates an interrupt request.
@@ -679,26 +635,36 @@ void setup() {
     ledsetup();
 }
 
+unsigned char led_colors[PIXELS][3];
+signed char direction = 1;
+const unsigned char delta = (256/PIXELS); //delta of hue between each pixel, spread out evenly
+
 ISR(PCINT0_vect) {
-    //showColor(0,0,0);
+    //transition between -1,0,1
+    direction += 2;
+    direction = direction % 3;
+    direction -= 1;
+    //memset(led_colors, 0, sizeof(led_colors));
+    //show_all_led_colors();
+    //delay(255);
 }
 
-//unsigned char rgb_colors[3];
-unsigned char led_colors[PIXELS][3];
-
-void loop() {
-  for (unsigned char hue=0; hue < 255; hue++) {
-    for (unsigned char index=0; index < PIXELS; index++) {
-        hsv2rgb_rainbow(hue+(index*30), 255, 255, led_colors[index]);
-        }
-    
+void show_all_led_colors() {
     cli();  
     for (unsigned char index=0; index < PIXELS; index++) {
       sendPixel( led_colors[index][0] , led_colors[index][1] , led_colors[index][2] );
     }
     sei();
     show();
+}
 
+void loop() {
+  for (unsigned char hue=0; hue < 255; hue++) {
+    for (unsigned char index=0; index < PIXELS; index++) {
+        unsigned char offset = index * delta * direction;
+        hsv2rgb_rainbow(hue + offset, 255, 255, led_colors[index]);
+        }
+    show_all_led_colors();
     delay(20);
   }
 }
