@@ -98,9 +98,9 @@ void sendBit( bool bitVal ) {
 }  
 
   
-void sendByte( unsigned char byte ) {
+void sendByte( uint8_t byte ) {
     
-    for( unsigned char bit = 0 ; bit < 8 ; bit++ ) {
+    for( uint8_t bit = 0 ; bit < 8 ; bit++ ) {
       
       sendBit( bitRead( byte , 7 ) );                // Neopixel wants bit in highest-to-lowest order
                                                      // so send highest bit (bit #7 in an 8-bit byte since they start at 0)
@@ -128,7 +128,7 @@ inline void ledsetup() {
   
 }
 
-void sendPixel( unsigned char r, unsigned char g , unsigned char b )  {  
+void sendPixel( uint8_t r, uint8_t g , uint8_t b )  {  
   
   sendByte(r);          // Neopixel wants colors in green then red then blue order
   sendByte(g);
@@ -165,7 +165,7 @@ void show() {
 /*
 // Fill the dots one after the other with a color
 // rewrite to lift the compare out of the loop
-void colorWipe(unsigned char r , unsigned char g, unsigned char b, unsigned  char wait ) {
+void colorWipe(uint8_t r , uint8_t g, uint8_t b, unsigned  char wait ) {
   for(unsigned int i=0; i<PIXELS; i+= (PIXELS/60) ) {
     
     cli();
@@ -193,7 +193,7 @@ void colorWipe(unsigned char r , unsigned char g, unsigned char b, unsigned  cha
 
 #define THEATER_SPACING (PIXELS/20)
 
-void theaterChase( unsigned char r , unsigned char g, unsigned char b, unsigned char wait ) {
+void theaterChase( uint8_t r , uint8_t g, uint8_t b, uint8_t wait ) {
   
   for (int j=0; j< 3 ; j++) {  
   
@@ -238,7 +238,7 @@ void theaterChase( unsigned char r , unsigned char g, unsigned char b, unsigned 
 
 // I rewrite this one from scrtach to use high resolution for the color wheel to look nicer on a *much* bigger string
                                                                             
-void rainbowCycle(unsigned char frames , unsigned int frameAdvance, unsigned int pixelAdvance ) {
+void rainbowCycle(uint8_t frames , unsigned int frameAdvance, unsigned int pixelAdvance ) {
   
   // Hue is a number between 0 and 3*256 than defines a mix of r->g->b where
   // hue of 0 = Full red
@@ -261,8 +261,8 @@ void rainbowCycle(unsigned char frames , unsigned int frameAdvance, unsigned int
         currentPixelHue -= (3*256);
       }
             
-      unsigned char phase = currentPixelHue >> 8;
-      unsigned char step = currentPixelHue & 0xff;
+      uint8_t phase = currentPixelHue >> 8;
+      uint8_t step = currentPixelHue & 0xff;
                  
       switch (phase) {
         
@@ -300,7 +300,7 @@ void rainbowCycle(unsigned char frames , unsigned int frameAdvance, unsigned int
 // I added this one just to demonstrate how quickly you can flash the string.
 // Flashes get faster and faster until *boom* and fade to black.
 
-void detonate( unsigned char r , unsigned char g , unsigned char b , unsigned int startdelayms) {
+void detonate( uint8_t r , uint8_t g , uint8_t b , unsigned int startdelayms) {
   while (startdelayms) {
     
     showColor( r , g , b );      // Flash the color 
@@ -330,15 +330,15 @@ void detonate( unsigned char r , unsigned char g , unsigned char b , unsigned in
 //#define SCALE8_C 1
 #define SCALE8_AVRASM 1
 #define LIB8_ATTINY
-static inline unsigned char scale8( unsigned char i, unsigned char scale)
+static inline uint8_t scale8( uint8_t i, uint8_t scale)
 {
 #if SCALE8_C == 1
     return
     ((int)i * (int)(scale) ) >> 8;
 #elif SCALE8_AVRASM == 1
 #if defined(LIB8_ATTINY)
-    unsigned char work=0;
-    unsigned char cnt=0x80;
+    uint8_t work=0;
+    uint8_t cnt=0x80;
     asm volatile(
         "LOOP_%=:                             \n\t"
         "  sbrc %[scale], 0             \n\t"
@@ -373,13 +373,13 @@ static inline unsigned char scale8( unsigned char i, unsigned char scale)
 #endif
 }
 
-static inline unsigned char scale8_video_LEAVING_R1_DIRTY( unsigned char i, unsigned char scale)
+static inline uint8_t scale8_video_LEAVING_R1_DIRTY( uint8_t i, uint8_t scale)
 {
 #if SCALE8_C == 1 || defined(LIB8_ATTINY)
-    unsigned char j = (((int)i * (int)scale) >> 8) + ((i&&scale)?1:0);
+    uint8_t j = (((int)i * (int)scale) >> 8) + ((i&&scale)?1:0);
     return j;
 #elif SCALE8_AVRASM == 1
-    unsigned char j=0;
+    uint8_t j=0;
     asm volatile(
         "  tst %[i]\n\t"
         "  breq L_%=\n\t"
@@ -398,7 +398,7 @@ static inline unsigned char scale8_video_LEAVING_R1_DIRTY( unsigned char i, unsi
 #endif
 } 
 
-void hsv2rgb_rainbow(unsigned char hue, unsigned char colors[3])
+void hsv2rgb_rainbow(uint8_t hue, uint8_t colors[3])
 {
     // Yellow has a higher inherent brightness than
     // any other color; 'pure' yellow is perceived to
@@ -408,21 +408,21 @@ void hsv2rgb_rainbow(unsigned char hue, unsigned char colors[3])
     // colors.
     // Level Y1 is a moderate boost, the default.
     // Level Y2 is a strong boost.
-    const unsigned char Y1 = 1;
-    const unsigned char Y2 = 0;
+    const uint8_t Y1 = 1;
+    const uint8_t Y2 = 0;
 
     // G2: Whether to divide all greens by two.
     // Depends GREATLY on your particular LEDs
-    const unsigned char G2 = 0;
+    const uint8_t G2 = 0;
     
     // Gscale: what to scale green down by.
     // Depends GREATLY on your particular LEDs
-    const unsigned char Gscale = 0;
+    const uint8_t Gscale = 0;
 
-    unsigned char offset = hue & 0x1F; // 0..31
+    uint8_t offset = hue & 0x1F; // 0..31
     
     // offset8 = offset * 8
-    unsigned char offset8 = offset;
+    uint8_t offset8 = offset;
     {
         offset8 <<= 1;
         asm volatile("");
@@ -431,7 +431,7 @@ void hsv2rgb_rainbow(unsigned char hue, unsigned char colors[3])
         offset8 <<= 1;
     }
     
-    unsigned char third = scale8( offset8, (256 / 3));
+    uint8_t third = scale8( offset8, (256 / 3));
         
     memset(colors, 0, sizeof(colors));
     
@@ -454,8 +454,8 @@ void hsv2rgb_rainbow(unsigned char hue, unsigned char colors[3])
                 }
                 if( Y2 ) {
                     colors[0] = K171 + third;
-                    //unsigned char twothirds = (third << 1);
-                    unsigned char twothirds = scale8( offset8, ((256 * 2) / 3));
+                    //uint8_t twothirds = (third << 1);
+                    uint8_t twothirds = scale8( offset8, ((256 * 2) / 3));
                     colors[1] = K85 + twothirds;
                 }
             }
@@ -466,7 +466,7 @@ void hsv2rgb_rainbow(unsigned char hue, unsigned char colors[3])
                 // 010
                 //case 2: // Y -> G
                 if( Y1 ) {
-                    unsigned char twothirds = scale8( offset8, ((256 * 2) / 3));
+                    uint8_t twothirds = scale8( offset8, ((256 * 2) / 3));
                     colors[0] = K171 - twothirds;
                     colors[1] = K171 + third;
                 }
@@ -490,7 +490,7 @@ void hsv2rgb_rainbow(unsigned char hue, unsigned char colors[3])
                 // 100
                 //case 4: // A -> B
                 //r = 0;
-                unsigned char twothirds = scale8( offset8, ((256 * 2) / 3));
+                uint8_t twothirds = scale8( offset8, ((256 * 2) / 3));
                 colors[1] = K171 - twothirds;
                 colors[2] = K85  + twothirds;
             } else {
@@ -524,8 +524,8 @@ void hsv2rgb_rainbow(unsigned char hue, unsigned char colors[3])
 
 
 inline void interruptSetup() {
-    const unsigned char buttonPin=3;
-    //cli(); //disable interrupts
+    const uint8_t directionButtonPin=3;
+    const uint8_t constantButtonPin=0;
     // initialize the pushbutton pin as an input:
     // actually they are all inputs by default, so do nothing
     //DDRB |= _BV(buttonPin);
@@ -538,8 +538,8 @@ inline void interruptSetup() {
     
     //GIMSK |= (1<<6); //Bit 6 INT0: External Interrupt Request 0 Enable
     GIMSK |= (1<<5); //Bit 5 PCIE: Pin Change Interrupt Enable
-    PCMSK |= (1<<buttonPin); //PCINT[5:0]: Pin Change Enable Mask 5:0
-    //sei(); //enable interrupts
+    PCMSK |= (1<<directionButtonPin); //PCINT[5:0]: Pin Change Enable Mask 5:0
+    PCMSK |= (1<<constantButtonPin); //PCINT[5:0]: Pin Change Enable Mask 5:0
 }
 
 void setup() {
@@ -547,23 +547,46 @@ void setup() {
     ledsetup();
 }
 
-unsigned char led_colors[PIXELS][3];
-signed char direction = 1;
-const unsigned char delta = (256/PIXELS); //delta of hue between each pixel, spread out evenly
+const uint8_t delta = (256/PIXELS); //delta of hue between each pixel, spread out evenly
+volatile boolean constant=0;
+volatile int8_t direction = 1;
+//volatile uint8_t constant_color_hue=0;
+uint8_t led_colors[PIXELS][3];
+volatile uint8_t constant_color_index=0;
+
+
+const uint8_t rgb_colors[8][3] {
+255,0,0,
+255,128,0,
+255,255,0,
+0,255,0,
+0,255,255,
+0,0,255,
+255,0,255,
+//255,128,128,
+255,255,255
+};
 
 ISR(PCINT0_vect) {
-    //transition between -1,0,1
-    direction += 2;
-    direction = direction % 3;
-    direction -= 1;
-    //memset(led_colors, 0, sizeof(led_colors));
-    //show_all_led_colors();
-    //delay(255);
+
+    if (PINB & (1<<3)) { //change direction
+        //transition between -1,0,1
+        constant = 0;
+        direction += 2;
+        direction = direction % 3;
+        direction -= 1;
+    }
+    else if (PINB & 1) { //constant color
+        //stop color shifting
+        constant = 1;
+        //constant_color_hue += 32;
+        ++constant_color_index % 8;
+    }
 }
 
 void show_all_led_colors() {
     cli();  
-    for (unsigned char index=0; index < PIXELS; index++) {
+    for (uint8_t index=0; index < PIXELS; index++) {
       sendPixel( led_colors[index][0] , led_colors[index][1] , led_colors[index][2] );
     }
     sei();
@@ -571,14 +594,29 @@ void show_all_led_colors() {
 }
 
 void loop() {
-  for (unsigned char hue=0; hue < 255; hue++) {
-    for (unsigned char index=0; index < PIXELS; index++) {
-        unsigned char offset = index * delta * direction;
-        hsv2rgb_rainbow(hue + offset, led_colors[index]);
+    if (constant) {
+        for (uint8_t index=0; index < PIXELS; index++) {
+            //hsv2rgb_rainbow(constant_color_hue, led_colors[index]);
+            memcpy(led_colors[index], rgb_colors[constant_color_index], 3);
+            //led_colors[index][0] = rgb_colors[constant_color_index][0];
+            //led_colors[index][1] = rgb_colors[constant_color_index][1];
+            //led_colors[index][2] = rgb_colors[constant_color_index][2];
         }
-    show_all_led_colors();
-    delay(20);
-  }
+        show_all_led_colors();
+        delay(20);
+    } else {
+        for (uint8_t hue=0; hue < 255; hue++) {
+            for (uint8_t index=0; index < PIXELS; index++) {
+                uint8_t offset = index * delta * direction;
+                hsv2rgb_rainbow(hue + offset, led_colors[index]);
+            }
+            show_all_led_colors();
+            delay(20);
+            if (constant) {
+                break;
+            }
+        }
+    }
 }
 
 
