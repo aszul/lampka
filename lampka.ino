@@ -373,58 +373,10 @@ static inline unsigned char scale8( unsigned char i, unsigned char scale)
 #endif
 }
 
-static inline void nscale8_video_LEAVING_R1_DIRTY( unsigned char & i, unsigned char scale)
-{
-#if SCALE8_C == 1 || defined(LIB8_ATTINY)
-    i = (((int)i * (int)scale) >> 8) + ((i&&scale)?1:0);
-#elif SCALE8_AVRASM == 1
-    asm volatile(
-        "  tst %[i]\n\t"
-        "  breq L_%=\n\t"
-        "  mul %[i], %[scale]\n\t"
-        "  mov %[i], r1\n\t"
-        "  breq L_%=\n\t"
-        "  subi %[i], 0xFF\n\t"
-        "L_%=: \n\t"
-        : [i] "+a" (i)
-        : [scale] "a" (scale)
-        : "r0", "r1");
-#else
-#error "No implementation for scale8_video_LEAVING_R1_DIRTY available."
-#endif
-}
-
-static inline void cleanup_R1()
-{
-#if CLEANUP_R1_AVRASM == 1
-    // Restore r1 to "0"; it's expected to always be that
-    asm volatile( "clr __zero_reg__  \n\t" : : : "r1" );
-#endif
-}
-
-static inline void nscale8x3_video( unsigned char& r, unsigned char& g, unsigned char& b, unsigned char scale)
-{
-#if SCALE8_C == 1
-    unsigned char nonzeroscale = (scale != 0) ? 1 : 0;
-    r = (r == 0) ? 0 : (((int)r * (int)(scale) ) >> 8) + nonzeroscale;
-    g = (g == 0) ? 0 : (((int)g * (int)(scale) ) >> 8) + nonzeroscale;
-    b = (b == 0) ? 0 : (((int)b * (int)(scale) ) >> 8) + nonzeroscale;
-#elif SCALE8_AVRASM == 1
-    nscale8_video_LEAVING_R1_DIRTY( r, scale);
-    nscale8_video_LEAVING_R1_DIRTY( g, scale);
-    nscale8_video_LEAVING_R1_DIRTY( b, scale);
-    cleanup_R1();
-#else
-#error "No implementation for nscale8x3 available."
-#endif
-}
- 
 static inline unsigned char scale8_video_LEAVING_R1_DIRTY( unsigned char i, unsigned char scale)
 {
 #if SCALE8_C == 1 || defined(LIB8_ATTINY)
     unsigned char j = (((int)i * (int)scale) >> 8) + ((i&&scale)?1:0);
-    // unsigned char nonzeroscale = (scale != 0) ? 1 : 0;
-    // unsigned char j = (i == 0) ? 0 : (((int)i * (int)(scale) ) >> 8) + nonzeroscale;
     return j;
 #elif SCALE8_AVRASM == 1
     unsigned char j=0;
@@ -441,28 +393,12 @@ static inline unsigned char scale8_video_LEAVING_R1_DIRTY( unsigned char i, unsi
         : "r0", "r1");
 
     return j;
-    // unsigned char nonzeroscale = (scale != 0) ? 1 : 0;
-    // asm volatile(
-    //      "      tst %0           \n"
-    //      "      breq L_%=        \n"
-    //      "      mul %0, %1       \n"
-    //      "      mov %0, r1       \n"
-    //      "      add %0, %2       \n"
-    //      "      clr __zero_reg__ \n"
-    //      "L_%=:                  \n"
-
-    //      : "+a" (i)
-    //      : "a" (scale), "a" (nonzeroscale)
-    //      : "r0", "r1");
-
-    // // Return the result
-    // return i;
 #else
 #error "No implementation for scale8_video_LEAVING_R1_DIRTY available."
 #endif
 } 
 
-void hsv2rgb_rainbow( unsigned char hue, unsigned char sat, unsigned char val, unsigned char colors[3])
+void hsv2rgb_rainbow(unsigned char hue, unsigned char colors[3])
 {
     // Yellow has a higher inherent brightness than
     // any other color; 'pure' yellow is perceived to
@@ -582,30 +518,6 @@ void hsv2rgb_rainbow( unsigned char hue, unsigned char sat, unsigned char val, u
     // although the client can scale green down as well.
     if( G2 ) colors[1] = colors[1] >> 1;
     if( Gscale ) colors[1] = scale8_video_LEAVING_R1_DIRTY( colors[1], Gscale);
-    
-    /* commenting out saturation and brightness, keep them at max
-    // Scale down colors if we're desaturated at all
-    // and add the brightness_floor to r, g, and b.
-    if( sat != 255 ) {
-
-        nscale8x3_video( colors[0], colors[1], colors[2], sat);
-
-        unsigned char desat = 255 - sat;
-        desat = scale8( desat, desat);
-        
-        //unsigned char brightness_floor = desat;
-        colors[0] += desat;
-        colors[1] += desat;
-        colors[2] += desat;
-    }
-
-    // Now scale everything down if we're at value < 255.
-    if( val != 255 ) {
-        
-        val = scale8_video_LEAVING_R1_DIRTY( val, val);
-        nscale8x3_video( colors[0], colors[1], colors[2], val);
-    }
-    */
 }
 
 ////////////////////////////////////////////////////////////////////////////////////
@@ -662,7 +574,7 @@ void loop() {
   for (unsigned char hue=0; hue < 255; hue++) {
     for (unsigned char index=0; index < PIXELS; index++) {
         unsigned char offset = index * delta * direction;
-        hsv2rgb_rainbow(hue + offset, 255, 255, led_colors[index]);
+        hsv2rgb_rainbow(hue + offset, led_colors[index]);
         }
     show_all_led_colors();
     delay(20);
