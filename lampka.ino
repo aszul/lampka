@@ -595,12 +595,6 @@ void clear_led_colors() {
     }    
 }
 
-void set_one_led(uint8_t index) {
-    led_colors[index][0]=255;
-    led_colors[index][1]=255;
-    led_colors[index][2]=255;
-}
-
 void show_all_led_colors() {
     cli();
     for (uint8_t index=0; index < PIXELS; index++) {
@@ -612,13 +606,15 @@ void show_all_led_colors() {
 
 void loop() {
     clear_led_colors();
+    uint8_t hue_to_compute = 0;
     for (uint8_t index=0; index < PIXELS; index++) {
         if (constant) {
-            hsv2rgb_rainbow(constant_color_hue, led_colors[index]);
+            hue_to_compute = constant_color_hue;
         } else {
             uint8_t offset = index * delta * direction;
-            hsv2rgb_rainbow(current_hue + offset, led_colors[index]);
+            hue_to_compute = current_hue + offset;
         }
+        hsv2rgb_rainbow(hue_to_compute, led_colors[index]);
     }
     current_hue++;
     show_all_led_colors();
