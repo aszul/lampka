@@ -1,0 +1,770 @@
+
+/*
+ This is an example of how simple driving a Neopixel can be
+ This code is optimized for understandability and changability rather than raw speed
+ More info at http://wp.josh.com/2014/05/11/ws2812-neopixels-made-easy/
+*/
+
+// Change this to be at least as long as your pixel string (too long will work fine, just be a little slower)
+
+#define PIXELS 4  // Number of pixels in the string
+
+// These values depend on which pin your string is connected to and what board you are using 
+// More info on how to find these at http://www.arduino.cc/en/Reference/PortManipulation
+
+// These values are for digital pin 8 on an Arduino Yun or digital pin 12 on a DueMilinove/UNO
+// Note that you could also include the DigitalWriteFast header file to not need to to this lookup.
+
+#define PIXEL_PORT  PORTB  // Port of the pin the pixels are connected to
+#define PIXEL_DDR   DDRB   // Port of the pin the pixels are connected to
+#define PIXEL_BIT   4      // Bit of the pin the pixels are connected to
+
+// These are the timing constraints taken mostly from the WS2812 datasheets 
+// These are chosen to be conservative and avoid problems rather than for maximum throughput 
+
+#define T1H  900    // Width of a 1 bit in ns
+#define T1L  600    // Width of a 1 bit in ns
+
+#define T0H  400    // Width of a 0 bit in ns
+#define T0L  900    // Width of a 0 bit in ns
+
+#define RES 6000    // Width of the low gap between bits to cause a frame to latch
+
+// Here are some convience defines for using nanoseconds specs to generate actual CPU delays
+
+#define NS_PER_SEC (1000000000L)          // Note that this has to be SIGNED since we want to be able to check for negative values of derivatives
+
+#define CYCLES_PER_SEC (F_CPU)
+
+#define NS_PER_CYCLE ( NS_PER_SEC / CYCLES_PER_SEC )
+
+#define NS_TO_CYCLES(n) ( (n) / NS_PER_CYCLE )
+
+// Actually send a bit to the string. We must to drop to asm to enusre that the complier does
+// not reorder things and make it so the delay happens in the wrong place.
+
+void sendBit( bool bitVal ) {
+  
+    if (  bitVal ) {        // 0 bit
+      
+    asm volatile (
+      "sbi %[port], %[bit] \n\t"        // Set the output bit
+      ".rept %[onCycles] \n\t"                                // Execute NOPs to delay exactly the specified number of cycles
+      "nop \n\t"
+      ".endr \n\t"
+      "cbi %[port], %[bit] \n\t"                              // Clear the output bit
+      ".rept %[offCycles] \n\t"                               // Execute NOPs to delay exactly the specified number of cycles
+      "nop \n\t"
+      ".endr \n\t"
+      ::
+      [port]    "I" (_SFR_IO_ADDR(PIXEL_PORT)),
+      [bit]   "I" (PIXEL_BIT),
+      [onCycles]  "I" (NS_TO_CYCLES(T1H) - 2),    // 1-bit width less overhead  for the actual bit setting, note that this delay could be longer and everything would still work
+      [offCycles]   "I" (NS_TO_CYCLES(T1L) - 2)     // Minimum interbit delay. Note that we probably don't need this at all since the loop overhead will be enough, but here for correctness
+
+    );
+                                  
+    } else {          // 1 bit
+
+    // **************************************************************************
+    // This line is really the only tight goldilocks timing in the whole program!
+    // **************************************************************************
+
+
+    asm volatile (
+      "sbi %[port], %[bit] \n\t"        // Set the output bit
+      ".rept %[onCycles] \n\t"        // Now timing actually matters. The 0-bit must be long enough to be detected but not too long or it will be a 1-bit
+      "nop \n\t"                                              // Execute NOPs to delay exactly the specified number of cycles
+      ".endr \n\t"
+      "cbi %[port], %[bit] \n\t"                              // Clear the output bit
+      ".rept %[offCycles] \n\t"                               // Execute NOPs to delay exactly the specified number of cycles
+      "nop \n\t"
+      ".endr \n\t"
+      ::
+      [port]    "I" (_SFR_IO_ADDR(PIXEL_PORT)),
+      [bit]   "I" (PIXEL_BIT),
+      [onCycles]  "I" (NS_TO_CYCLES(T0H) - 2),
+      [offCycles] "I" (NS_TO_CYCLES(T0L) - 2)
+
+    );
+      
+    }
+    
+    // Note that the inter-bit gap can be as long as you want as long as it doesn't exceed the 5us reset timeout (which is A long time)
+    // Here I have been generous and not tried to squeeze the gap tight but instead erred on the side of lots of extra time.
+    // This has thenice side effect of avoid glitches on very long strings becuase 
+
+    
+}  
+
+  
+void sendByte( unsigned char byte ) {
+    
+    for( unsigned char bit = 0 ; bit < 8 ; bit++ ) {
+      
+      sendBit( bitRead( byte , 7 ) );                // Neopixel wants bit in highest-to-lowest order
+                                                     // so send highest bit (bit #7 in an 8-bit byte since they start at 0)
+      byte <<= 1;                                    // and then shift left so bit 6 moves into 7, 5 moves into 6, etc
+      
+    }           
+} 
+
+/*
+
+  The following three functions are the public API:
+  
+  ledSetup() - set up the pin that is connected to the string. Call once at the begining of the program.  
+  sendPixel( r g , b ) - send a single pixel to the string. Call this once for each pixel in a frame.
+  show() - show the recently sent pixel on the LEDs . Call once per frame. 
+  
+*/
+
+
+// Set the specified pin up as digital out
+
+inline void ledsetup() {
+  
+  bitSet( PIXEL_DDR , PIXEL_BIT );
+  
+}
+
+void sendPixel( unsigned char r, unsigned char g , unsigned char b )  {  
+  
+  sendByte(r);          // Neopixel wants colors in green then red then blue order
+  sendByte(g);
+  sendByte(b);
+  
+}
+
+
+// Just wait long enough without sending any bots to cause the pixels to latch and display the last sent frame
+
+void show() {
+  //_delay_us( (RES / 1000UL) + 1);       // Round up since the delay must be _at_least_ this long (too short might not work, too long not a problem)
+ delayMicroseconds((RES / 1000UL) + 1);
+}
+
+
+/*
+
+  That is the whole API. What follows are some demo functions rewriten from the AdaFruit strandtest code...
+  
+  https://github.com/adafruit/Adafruit_NeoPixel/blob/master/examples/strandtest/strandtest.ino
+  
+  Note that we always turn off interrupts while we are sending pixels becuase an interupt
+  could happen just when we were in the middle of somehting time sensitive.
+  
+  If we wanted to minimize the time interrupts were off, we could instead 
+  could get away with only turning off interrupts just for the very brief moment 
+  when we are actually sending a 0 bit (~1us), as long as we were sure that the total time 
+  taken by any interrupts + the time in our pixel generation code never exceeded the reset time (5us).
+  
+*/
+
+
+// Display a single color on the whole string
+
+void showColor( unsigned char r , unsigned char g , unsigned char b ) {
+  
+  cli();  
+  for( int p=0; p<PIXELS; p++ ) {
+    sendPixel( r , g , b );
+  }
+  sei();
+  show();
+  
+}
+
+/*
+// Fill the dots one after the other with a color
+// rewrite to lift the compare out of the loop
+void colorWipe(unsigned char r , unsigned char g, unsigned char b, unsigned  char wait ) {
+  for(unsigned int i=0; i<PIXELS; i+= (PIXELS/60) ) {
+    
+    cli();
+    unsigned int p=0;
+    
+    while (p++<=i) {
+        sendPixel(r,g,b);
+    } 
+     
+    while (p++<=PIXELS) {
+        sendPixel(0,0,0);  
+      
+    }
+    
+    sei();
+    show();
+    delay(wait);
+  }
+}
+*/
+
+/*
+// Theatre-style crawling lights.
+// Changes spacing to be dynmaic based on string size
+
+#define THEATER_SPACING (PIXELS/20)
+
+void theaterChase( unsigned char r , unsigned char g, unsigned char b, unsigned char wait ) {
+  
+  for (int j=0; j< 3 ; j++) {  
+  
+    for (int q=0; q < THEATER_SPACING ; q++) {
+      
+      unsigned int step=0;
+      
+      cli();
+      
+      for (int i=0; i < PIXELS ; i++) {
+        
+        if (step==q) {
+          
+          sendPixel( r , g , b );
+          
+        } else {
+          
+          sendPixel( 0 , 0 , 0 );
+          
+        }
+        
+        step++;
+        
+        if (step==THEATER_SPACING) step =0;
+        
+      }
+      
+      sei();
+      
+      show();
+      delay(wait);
+      
+    }
+    
+  }
+  
+}
+        
+*/
+
+/*
+
+// I rewrite this one from scrtach to use high resolution for the color wheel to look nicer on a *much* bigger string
+                                                                            
+void rainbowCycle(unsigned char frames , unsigned int frameAdvance, unsigned int pixelAdvance ) {
+  
+  // Hue is a number between 0 and 3*256 than defines a mix of r->g->b where
+  // hue of 0 = Full red
+  // hue of 128 = 1/2 red and 1/2 green
+  // hue of 256 = Full Green
+  // hue of 384 = 1/2 green and 1/2 blue
+  // ...
+  
+  unsigned int firstPixelHue = 0;     // Color for the first pixel in the string
+  
+  for(unsigned int j=0; j<frames; j++) {                                  
+    
+    unsigned int currentPixelHue = firstPixelHue;
+       
+    cli();    
+        
+    for(unsigned int i=0; i< PIXELS; i++) {
+      
+      if (currentPixelHue>=(3*256)) {                  // Normalize back down incase we incremented and overflowed
+        currentPixelHue -= (3*256);
+      }
+            
+      unsigned char phase = currentPixelHue >> 8;
+      unsigned char step = currentPixelHue & 0xff;
+                 
+      switch (phase) {
+        
+        case 0: 
+          sendPixel( ~step , step ,  0 );
+          break;
+          
+        case 1: 
+          sendPixel( 0 , ~step , step );
+          break;
+
+        case 2: 
+          sendPixel(  step ,0 , ~step );
+          break;
+          
+      }
+      
+      currentPixelHue+=pixelAdvance;                                      
+      
+                          
+    } 
+    
+    sei();
+    
+    show();
+    
+    firstPixelHue += frameAdvance;
+           
+  }
+}
+*/
+
+
+/*  
+// I added this one just to demonstrate how quickly you can flash the string.
+// Flashes get faster and faster until *boom* and fade to black.
+
+void detonate( unsigned char r , unsigned char g , unsigned char b , unsigned int startdelayms) {
+  while (startdelayms) {
+    
+    showColor( r , g , b );      // Flash the color 
+    showColor( 0 , 0 , 0 );
+    
+    delay( startdelayms );      
+    
+    startdelayms =  ( startdelayms * 4 ) / 5 ;           // delay between flashes is halved each time until zero
+    
+  }
+
+  // Then we fade to black....
+  for( int fade=256; fade>0; fade-- ) {
+    showColor( (r * fade) / 256 ,(g*fade) /256 , (b*fade)/256 );
+  }
+  showColor( 0 , 0 , 0 );
+}
+*/
+
+/* 
+  dim_curve 'lookup table' to compensate for the nonlinearity of human vision.
+  Used in the getRGB function on saturation and brightness to make 'dimming' look more natural. 
+  Exponential function used to create values below : 
+  x from 0 - 255 : y = round(pow( 2.0, x+64/40.0) - 1)   
+*/
+/*
+const unsigned char dim_curve[] = {
+    0,   1,   1,   2,   2,   2,   2,   2,   2,   3,   3,   3,   3,   3,   3,   3,
+    3,   3,   3,   3,   3,   3,   3,   4,   4,   4,   4,   4,   4,   4,   4,   4,
+    4,   4,   4,   5,   5,   5,   5,   5,   5,   5,   5,   5,   5,   6,   6,   6,
+    6,   6,   6,   6,   6,   7,   7,   7,   7,   7,   7,   7,   8,   8,   8,   8,
+    8,   8,   9,   9,   9,   9,   9,   9,   10,  10,  10,  10,  10,  11,  11,  11,
+    11,  11,  12,  12,  12,  12,  12,  13,  13,  13,  13,  14,  14,  14,  14,  15,
+    15,  15,  16,  16,  16,  16,  17,  17,  17,  18,  18,  18,  19,  19,  19,  20,
+    20,  20,  21,  21,  22,  22,  22,  23,  23,  24,  24,  25,  25,  25,  26,  26,
+    27,  27,  28,  28,  29,  29,  30,  30,  31,  32,  32,  33,  33,  34,  35,  35,
+    36,  36,  37,  38,  38,  39,  40,  40,  41,  42,  43,  43,  44,  45,  46,  47,
+    48,  48,  49,  50,  51,  52,  53,  54,  55,  56,  57,  58,  59,  60,  61,  62,
+    63,  64,  65,  66,  68,  69,  70,  71,  73,  74,  75,  76,  78,  79,  81,  82,
+    83,  85,  86,  88,  90,  91,  93,  94,  96,  98,  99,  101, 103, 105, 107, 109,
+    110, 112, 114, 116, 118, 121, 123, 125, 127, 129, 132, 134, 136, 139, 141, 144,
+    146, 149, 151, 154, 157, 159, 162, 165, 168, 171, 174, 177, 180, 183, 186, 190,
+    193, 196, 200, 203, 207, 211, 214, 218, 222, 226, 230, 234, 238, 242, 248, 255,
+};
+*/
+
+void getRGB(int hue, unsigned char colors[3]) { 
+  /* convert hue, saturation and brightness ( HSB/HSV ) to RGB
+     The dim_curve is used only on brightness/value and on saturation (inverted).
+     This looks the most natural.      
+  */
+
+  //val = dim_curve[val];
+  //sat = 255-dim_curve[255-sat];
+  const unsigned char val = 255;
+  const unsigned char sat = 255;
+
+  int r;
+  int g;
+  int b;
+  int base;
+
+  if (sat == 0) { // Acromatic color (gray). Hue doesn't mind.
+    colors[0]=val;
+    colors[1]=val;
+    colors[2]=val;  
+  } else  { 
+
+    base = ((255 - sat) * val)>>8;
+
+    switch(hue/60) {
+  case 0:
+    r = val;
+    g = (((val-base)*hue)/60)+base;
+    b = base;
+  break;
+
+  case 1:
+    r = (((val-base)*(60-(hue%60)))/60)+base;
+    g = val;
+    b = base;
+  break;
+
+  case 2:
+    r = base;
+    g = val;
+    b = (((val-base)*(hue%60))/60)+base;
+  break;
+
+  case 3:
+    r = base;
+    g = (((val-base)*(60-(hue%60)))/60)+base;
+    b = val;
+  break;
+
+  case 4:
+    r = (((val-base)*(hue%60))/60)+base;
+    g = base;
+    b = val;
+  break;
+
+  case 5:
+    r = val;
+    g = base;
+    b = (((val-base)*(60-(hue%60)))/60)+base;
+  break;
+    }
+    
+    
+    //brightness?
+    
+
+    colors[0]=r;
+    colors[1]=g;
+    colors[2]=b; 
+  }   
+}
+
+
+////////////////////////////////////////////////////////////////////////////////////
+#define FORCE_REFERENCE(var)  asm volatile( "" : : "r" (var) )
+#define K255 255
+#define K171 171
+#define K85  85
+
+#define SCALE8_C 1
+static inline unsigned char scale8( unsigned char i, unsigned char scale)
+{
+#if SCALE8_C == 1
+    return
+    ((int)i * (int)(scale) ) >> 8;
+#elif SCALE8_AVRASM == 1
+#if defined(LIB8_ATTINY)
+    unsigned char work=0;
+    unsigned char cnt=0x80;
+    asm volatile(
+        "LOOP_%=:                             \n\t"
+        /*"  sbrc %[scale], 0             \n\t"
+        "  add %[work], %[i]            \n\t"
+        "  ror %[work]                  \n\t"
+        "  lsr %[scale]                 \n\t"
+        "  clc                          \n\t"*/
+        "  sbrc %[scale], 0             \n\t"
+        "  add %[work], %[i]            \n\t"
+        "  ror %[work]                  \n\t"
+        "  lsr %[scale]                 \n\t"
+        "  lsr %[cnt]                   \n\t"
+        "brcc LOOP_%="
+        : [work] "+r" (work), [cnt] "+r" (cnt)
+        : [scale] "r" (scale), [i] "r" (i)
+        :
+      );
+    return work;
+#else
+    asm volatile(
+         /* Multiply 8-bit i * 8-bit scale, giving 16-bit r1,r0 */
+         "mul %0, %1          \n\t"
+         /* Move the high 8-bits of the product (r1) back to i */
+         "mov %0, r1          \n\t"
+         /* Restore r1 to "0"; it's expected to always be that */
+         "clr __zero_reg__    \n\t"
+
+         : "+a" (i)      /* writes to i */
+         : "a"  (scale)  /* uses scale */
+         : "r0", "r1"    /* clobbers r0, r1 */ );
+
+    /* Return the result */
+    return i;
+#endif
+#else
+#error "No implementation for scale8 available."
+#endif
+}
+
+static inline void nscale8x3_video( unsigned char& r, unsigned char& g, unsigned char& b, unsigned char scale)
+{
+#if SCALE8_C == 1
+    unsigned char nonzeroscale = (scale != 0) ? 1 : 0;
+    r = (r == 0) ? 0 : (((int)r * (int)(scale) ) >> 8) + nonzeroscale;
+    g = (g == 0) ? 0 : (((int)g * (int)(scale) ) >> 8) + nonzeroscale;
+    b = (b == 0) ? 0 : (((int)b * (int)(scale) ) >> 8) + nonzeroscale;
+#elif SCALE8_AVRASM == 1
+    nscale8_video_LEAVING_R1_DIRTY( r, scale);
+    nscale8_video_LEAVING_R1_DIRTY( g, scale);
+    nscale8_video_LEAVING_R1_DIRTY( b, scale);
+    cleanup_R1();
+#else
+#error "No implementation for nscale8x3 available."
+#endif
+}
+ 
+static inline unsigned char scale8_video_LEAVING_R1_DIRTY( unsigned char i, unsigned char scale)
+{
+#if SCALE8_C == 1 || defined(LIB8_ATTINY)
+    unsigned char j = (((int)i * (int)scale) >> 8) + ((i&&scale)?1:0);
+    // unsigned char nonzeroscale = (scale != 0) ? 1 : 0;
+    // unsigned char j = (i == 0) ? 0 : (((int)i * (int)(scale) ) >> 8) + nonzeroscale;
+    return j;
+#elif SCALE8_AVRASM == 1
+    unsigned char j=0;
+    asm volatile(
+        "  tst %[i]\n\t"
+        "  breq L_%=\n\t"
+        "  mul %[i], %[scale]\n\t"
+        "  mov %[j], r1\n\t"
+        "  breq L_%=\n\t"
+        "  subi %[j], 0xFF\n\t"
+        "L_%=: \n\t"
+        : [j] "+a" (j)
+        : [i] "a" (i), [scale] "a" (scale)
+        : "r0", "r1");
+
+    return j;
+    // unsigned char nonzeroscale = (scale != 0) ? 1 : 0;
+    // asm volatile(
+    //      "      tst %0           \n"
+    //      "      breq L_%=        \n"
+    //      "      mul %0, %1       \n"
+    //      "      mov %0, r1       \n"
+    //      "      add %0, %2       \n"
+    //      "      clr __zero_reg__ \n"
+    //      "L_%=:                  \n"
+
+    //      : "+a" (i)
+    //      : "a" (scale), "a" (nonzeroscale)
+    //      : "r0", "r1");
+
+    // // Return the result
+    // return i;
+#else
+#error "No implementation for scale8_video_LEAVING_R1_DIRTY available."
+#endif
+} 
+
+void hsv2rgb_rainbow( unsigned char hue, unsigned char sat, unsigned char val, unsigned char colors[3])
+{
+    // Yellow has a higher inherent brightness than
+    // any other color; 'pure' yellow is perceived to
+    // be 93% as bright as white.  In order to make
+    // yellow appear the correct relative brightness,
+    // it has to be rendered brighter than all other
+    // colors.
+    // Level Y1 is a moderate boost, the default.
+    // Level Y2 is a strong boost.
+    const unsigned char Y1 = 1;
+    const unsigned char Y2 = 0;
+
+    // G2: Whether to divide all greens by two.
+    // Depends GREATLY on your particular LEDs
+    const unsigned char G2 = 0;
+    
+    // Gscale: what to scale green down by.
+    // Depends GREATLY on your particular LEDs
+    const unsigned char Gscale = 0;
+
+    unsigned char offset = hue & 0x1F; // 0..31
+    
+    // offset8 = offset * 8
+    unsigned char offset8 = offset;
+    {
+        offset8 <<= 1;
+        asm volatile("");
+        offset8 <<= 1;
+        asm volatile("");
+        offset8 <<= 1;
+    }
+    
+    unsigned char third = scale8( offset8, (256 / 3));
+        
+    unsigned char r, g, b;
+    
+    if( ! (hue & 0x80) ) {
+        // 0XX
+        if( ! (hue & 0x40) ) {
+            // 00X
+            //section 0-1
+            if( ! (hue & 0x20) ) {
+                // 000
+                //case 0: // R -> O
+                r = K255 - third;
+                g = third;
+                b = 0;
+                FORCE_REFERENCE(b);
+            } else {
+                // 001
+                //case 1: // O -> Y
+                if( Y1 ) {
+                    r = K171;
+                    g = K85 + third ;
+                    b = 0;
+                    FORCE_REFERENCE(b);
+                }
+                if( Y2 ) {
+                    r = K171 + third;
+                    //unsigned char twothirds = (third << 1);
+                    unsigned char twothirds = scale8( offset8, ((256 * 2) / 3));
+                    g = K85 + twothirds;
+                    b = 0;
+                    FORCE_REFERENCE(b);
+                }
+            }
+        } else {
+            //01X
+            // section 2-3
+            if( !  (hue & 0x20) ) {
+                // 010
+                //case 2: // Y -> G
+                if( Y1 ) {
+                    //unsigned char twothirds = (third << 1);
+                    unsigned char twothirds = scale8( offset8, ((256 * 2) / 3));
+                    r = K171 - twothirds;
+                    g = K171 + third;
+                    b = 0;
+                    FORCE_REFERENCE(b);
+                }
+                if( Y2 ) {
+                    r = K255 - offset8;
+                    g = K255;
+                    b = 0;
+                    FORCE_REFERENCE(b);
+                }
+            } else {
+                // 011
+                // case 3: // G -> A
+                r = 0;
+                FORCE_REFERENCE(r);
+                g = K255 - third;
+                b = third;
+            }
+        }
+    } else {
+        // section 4-7
+        // 1XX
+        if( ! (hue & 0x40) ) {
+            // 10X
+            if( ! ( hue & 0x20) ) {
+                // 100
+                //case 4: // A -> B
+                r = 0;
+                FORCE_REFERENCE(r);
+                //unsigned char twothirds = (third << 1);
+                unsigned char twothirds = scale8( offset8, ((256 * 2) / 3));
+                g = K171 - twothirds;
+                b = K85  + twothirds;
+
+            } else {
+                // 101
+                //case 5: // B -> P
+                r = third;
+                g = 0;
+                FORCE_REFERENCE(g);
+                b = K255 - third;
+
+            }
+        } else {
+            if( !  (hue & 0x20)  ) {
+                // 110
+                //case 6: // P -- K
+                r = K85 + third;
+                g = 0;
+                FORCE_REFERENCE(g);
+                b = K171 - third;
+
+            } else {
+                // 111
+                //case 7: // K -> R
+                r = K171 + third;
+                g = 0;
+                FORCE_REFERENCE(g);
+                b = K85 - third;
+
+            }
+        }
+    }
+    
+    // This is one of the good places to scale the green down,
+    // although the client can scale green down as well.
+    if( G2 ) g = g >> 1;
+    if( Gscale ) g = scale8_video_LEAVING_R1_DIRTY( g, Gscale);
+    
+    // Scale down colors if we're desaturated at all
+    // and add the brightness_floor to r, g, and b.
+    if( sat != 255 ) {
+
+        nscale8x3_video( r, g, b, sat);
+
+        unsigned char desat = 255 - sat;
+        desat = scale8( desat, desat);
+        
+        unsigned char brightness_floor = desat;
+        r += brightness_floor;
+        g += brightness_floor;
+        b += brightness_floor;
+    }
+
+    // Now scale everything down if we're at value < 255.
+    if( val != 255 ) {
+        
+        val = scale8_video_LEAVING_R1_DIRTY( val, val);
+        nscale8x3_video( r, g, b, val);
+    }
+    
+    colors[0] = r;
+    colors[1] = g;
+    colors[2] = b;
+}
+
+////////////////////////////////////////////////////////////////////////////////////
+
+unsigned char rgb_colors[3];
+
+unsigned char led_colors[PIXELS][3];
+
+void setup() {
+  ledsetup();
+}
+
+void loop() {
+/*
+  for (unsigned int hue=0; hue < 360; hue++) {
+    //getRGB(hue, rgb_colors);   // converts HSB to RGB
+    
+    hsv2rgb_rainbow(hue, 200, 200, rgb_colors);
+    showColor(rgb_colors[0], rgb_colors[1], rgb_colors[2]);
+    delay(10);
+  }
+  */
+  
+  /* //works great
+  for (unsigned char hue=0; hue < 255; hue++) {
+    hsv2rgb_rainbow(hue, 255, 255, rgb_colors);
+    showColor(rgb_colors[0], rgb_colors[1], rgb_colors[2]);
+    delay(20);
+    }  
+    */
+    
+  for (unsigned char hue=0; hue < 255; hue++) {
+    for (unsigned char index=0; index < PIXELS; index++) {
+        hsv2rgb_rainbow(hue+(index*30), 255, 255, led_colors[index]);
+        }
+    
+    cli();  
+    for (unsigned char index=0; index < PIXELS; index++) {
+      sendPixel( led_colors[index][0] , led_colors[index][1] , led_colors[index][2] );
+    }
+    sei();
+    show();
+
+    delay(20);
+  }
+}
+
+
+
