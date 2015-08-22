@@ -376,7 +376,6 @@ int8_t direction = 1;
 uint8_t constant_color_hue=0;
 uint8_t led_colors[PIXELS][3];
 uint8_t constant_color_index=0;
-#define CONSTANT_COLORS_LEN 9
 uint8_t current_hue=0;
 
 const uint8_t test_pixel[3] = {32,32,32};
@@ -391,9 +390,9 @@ ISR(PCINT0_vect) {
     }
     if (PINB & 1) { //constant color
         constant = 1;
-        constant_color_hue += 32;
         constant_color_index++;
-        constant_color_index %= CONSTANT_COLORS_LEN;
+        constant_color_index = constant_color_index % 9; //8 is white
+        constant_color_hue = 32 * constant_color_index;
     }
     sei();
 }
@@ -420,12 +419,20 @@ void loop() {
     uint8_t hue_to_compute = 0;
     for (uint8_t index=0; index < PIXELS; index++) {
         if (constant) {
-            hue_to_compute = constant_color_hue;
+            if (constant_color_index == 8) { //white
+                led_colors[index][0]=255;
+                led_colors[index][1]=255;
+                led_colors[index][2]=255;
+            } else {
+                hue_to_compute = constant_color_hue;
+                hsv2rgb_rainbow(hue_to_compute, led_colors[index]);
+            }
         } else {
             uint8_t offset = index * delta * direction;
             hue_to_compute = current_hue + offset;
+            hsv2rgb_rainbow(hue_to_compute, led_colors[index]);
         }
-        hsv2rgb_rainbow(hue_to_compute, led_colors[index]);
+        
     }
     current_hue++;
     show_all_led_colors();
