@@ -128,11 +128,11 @@ inline void ledsetup() {
   
 }
 
-void sendPixel( uint8_t r, uint8_t g , uint8_t b )  {  
+void sendPixel( const uint8_t rgb[3] )  {  
   
-  sendByte(r);          // Neopixel wants colors in green then red then blue order
-  sendByte(g);
-  sendByte(b);
+  sendByte(rgb[0]);
+  sendByte(rgb[1]);
+  sendByte(rgb[2]);
   
 }
 
@@ -543,67 +543,103 @@ inline void interruptSetup() {
 }
 
 void setup() {
+    //precompute_colors();
     interruptSetup();
     ledsetup();
 }
 
 const uint8_t delta = (256/PIXELS); //delta of hue between each pixel, spread out evenly
-volatile boolean constant=0;
-volatile int8_t direction = 1;
-//volatile uint8_t constant_color_hue=0;
+boolean constant=0;
+int8_t direction = 1;
+uint8_t constant_color_hue=0;
 uint8_t led_colors[PIXELS][3];
-volatile uint8_t constant_color_index=0;
+uint8_t constant_color_index=0;
+#define CONSTANT_COLORS_LEN 9
 
+const uint8_t test_pixel[3] = {32,32,32};
 
-const uint8_t rgb_colors[8][3] {
-255,0,0,
-255,128,0,
-255,255,0,
-0,255,0,
-0,255,255,
-0,0,255,
-255,0,255,
-//255,128,128,
-255,255,255
+const uint8_t rgb_colors[CONSTANT_COLORS_LEN][3] = {
+{255,0,0},
+{255,127,0},
+{255,255,0},
+{0,255,0},
+{0,255,255},
+{0,0,255},
+{255,0,255},
+{255,127,255},
+{255,255,255}
 };
 
-ISR(PCINT0_vect) {
+/*
+void precompute_colors() {
+    for (uint8_t color_index=0; color_index < CONSTANT_COLORS_LEN; color_index++) {
+        hsv2rgb_rainbow(constant_color_hue, rgb_colors[color_index]);
+    }
+}*/
 
+ISR(PCINT0_vect) {
+    //uint8_t button0 = digitalRead(0);
+    //uint8_t button3 = digitalRead(3);
+
+    //clear_led_colors();
     if (PINB & (1<<3)) { //change direction
+        //set_one_led(3);
         //transition between -1,0,1
         constant = 0;
         direction += 2;
         direction = direction % 3;
         direction -= 1;
     }
-    else if (PINB & 1) { //constant color
+    if (PINB & 1) { //constant color
+        //set_one_led(0);
         //stop color shifting
         constant = 1;
-        //constant_color_hue += 32;
-        ++constant_color_index % 8;
+        constant_color_hue += 32;
+        constant_color_index++;
+        constant_color_index %= CONSTANT_COLORS_LEN;
     }
+    //show_all_led_colors();
+}
+
+void clear_led_colors() {
+    for (uint8_t index=0; index < PIXELS; index++) {
+        led_colors[index][0]=0;
+        led_colors[index][1]=0;
+        led_colors[index][2]=0;
+    }    
+}
+
+void set_one_led(uint8_t index) {
+    led_colors[index][0]=255;
+    led_colors[index][1]=255;
+    led_colors[index][2]=255;
 }
 
 void show_all_led_colors() {
-    cli();  
+    cli();
     for (uint8_t index=0; index < PIXELS; index++) {
-      sendPixel( led_colors[index][0] , led_colors[index][1] , led_colors[index][2] );
+      sendPixel(led_colors[index]);
     }
-    sei();
     show();
+    sei();
 }
 
 void loop() {
-    if (constant) {
+    if (constant == 1) {
+        delay(1000);
+        /*
+        //hsv2rgb_rainbow(constant_color_hue, led_colors[0]);
+        
+        cli();  
         for (uint8_t index=0; index < PIXELS; index++) {
-            //hsv2rgb_rainbow(constant_color_hue, led_colors[index]);
-            memcpy(led_colors[index], rgb_colors[constant_color_index], 3);
-            //led_colors[index][0] = rgb_colors[constant_color_index][0];
-            //led_colors[index][1] = rgb_colors[constant_color_index][1];
-            //led_colors[index][2] = rgb_colors[constant_color_index][2];
+          sendPixel(rgb_colors[constant_color_index]);
+          //sendPixel(test_pixel);
+          //sendPixel(rgb_colors[3]);
         }
-        show_all_led_colors();
-        delay(20);
+        show();
+        sei();
+        delay(500);
+        */
     } else {
         for (uint8_t hue=0; hue < 255; hue++) {
             for (uint8_t index=0; index < PIXELS; index++) {
@@ -613,11 +649,11 @@ void loop() {
             show_all_led_colors();
             delay(20);
             if (constant) {
+                clear_led_colors();
+                show_all_led_colors();
+                delay(300);
                 break;
             }
         }
     }
 }
-
-
-
