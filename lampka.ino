@@ -392,7 +392,7 @@ ISR(PCINT0_vect) {
         constant = 1;
         constant_color_index++;
         constant_color_index = constant_color_index % 9; //8 is white
-        constant_color_hue = 32 * constant_color_index;
+        constant_color_hue = (256/8) * constant_color_index; //8 colors
     }
     sei();
 }
@@ -408,7 +408,7 @@ void clear_led_colors() {
 void show_all_led_colors() {
     cli();
     for (uint8_t index=0; index < PIXELS; index++) {
-      sendPixel(led_colors[index]);
+        sendPixel(led_colors[index]);
     }
     show();
     sei();
