@@ -392,7 +392,6 @@ ISR(PCINT0_vect) {
         constant = 1;
         constant_color_index++;
         constant_color_index = constant_color_index % 9; //8 is white
-        constant_color_hue = (256/8) * constant_color_index; //8 colors
     }
     sei();
 }
@@ -424,7 +423,7 @@ void loop() {
                 led_colors[index][1]=255;
                 led_colors[index][2]=255;
             } else {
-                hue_to_compute = constant_color_hue;
+                hue_to_compute = (256/8) * constant_color_index;
                 hsv2rgb_rainbow(hue_to_compute, led_colors[index]);
             }
         } else {
