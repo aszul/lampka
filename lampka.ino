@@ -543,7 +543,6 @@ inline void interruptSetup() {
 }
 
 void setup() {
-    //precompute_colors();
     interruptSetup();
     ledsetup();
 }
@@ -555,6 +554,7 @@ uint8_t constant_color_hue=0;
 uint8_t led_colors[PIXELS][3];
 uint8_t constant_color_index=0;
 #define CONSTANT_COLORS_LEN 9
+uint8_t current_hue=0;
 
 const uint8_t test_pixel[3] = {32,32,32};
 
@@ -570,35 +570,21 @@ const uint8_t rgb_colors[CONSTANT_COLORS_LEN][3] = {
 {255,255,255}
 };
 
-/*
-void precompute_colors() {
-    for (uint8_t color_index=0; color_index < CONSTANT_COLORS_LEN; color_index++) {
-        hsv2rgb_rainbow(constant_color_hue, rgb_colors[color_index]);
-    }
-}*/
-
 ISR(PCINT0_vect) {
-    //uint8_t button0 = digitalRead(0);
-    //uint8_t button3 = digitalRead(3);
-
-    //clear_led_colors();
+    cli();
     if (PINB & (1<<3)) { //change direction
-        //set_one_led(3);
-        //transition between -1,0,1
         constant = 0;
         direction += 2;
         direction = direction % 3;
         direction -= 1;
     }
     if (PINB & 1) { //constant color
-        //set_one_led(0);
-        //stop color shifting
         constant = 1;
         constant_color_hue += 32;
         constant_color_index++;
         constant_color_index %= CONSTANT_COLORS_LEN;
     }
-    //show_all_led_colors();
+    sei();
 }
 
 void clear_led_colors() {
@@ -625,35 +611,16 @@ void show_all_led_colors() {
 }
 
 void loop() {
-    if (constant == 1) {
-        delay(1000);
-        /*
-        //hsv2rgb_rainbow(constant_color_hue, led_colors[0]);
-        
-        cli();  
-        for (uint8_t index=0; index < PIXELS; index++) {
-          sendPixel(rgb_colors[constant_color_index]);
-          //sendPixel(test_pixel);
-          //sendPixel(rgb_colors[3]);
-        }
-        show();
-        sei();
-        delay(500);
-        */
-    } else {
-        for (uint8_t hue=0; hue < 255; hue++) {
-            for (uint8_t index=0; index < PIXELS; index++) {
-                uint8_t offset = index * delta * direction;
-                hsv2rgb_rainbow(hue + offset, led_colors[index]);
-            }
-            show_all_led_colors();
-            delay(20);
-            if (constant) {
-                clear_led_colors();
-                show_all_led_colors();
-                delay(300);
-                break;
-            }
+    clear_led_colors();
+    for (uint8_t index=0; index < PIXELS; index++) {
+        if (constant) {
+            hsv2rgb_rainbow(constant_color_hue, led_colors[index]);
+        } else {
+            uint8_t offset = index * delta * direction;
+            hsv2rgb_rainbow(current_hue + offset, led_colors[index]);
         }
     }
+    current_hue++;
+    show_all_led_colors();
+    delay(20);
 }
