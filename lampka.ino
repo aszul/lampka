@@ -378,8 +378,6 @@ uint8_t led_colors[PIXELS][3];
 uint8_t constant_color_index=0;
 uint8_t current_hue=0;
 
-const uint8_t test_pixel[3] = {32,32,32};
-
 ISR(PCINT0_vect) {
     cli();
     if (PINB & (1<<3)) { //change direction
@@ -397,11 +395,7 @@ ISR(PCINT0_vect) {
 }
 
 void clear_led_colors() {
-    for (uint8_t index=0; index < PIXELS; index++) {
-        led_colors[index][0]=0;
-        led_colors[index][1]=0;
-        led_colors[index][2]=0;
-    }    
+    memset(led_colors, 0, sizeof(led_colors));
 }
 
 void show_all_led_colors() {
