@@ -425,9 +425,10 @@ void loop() {
     for (uint8_t index=0; index < PIXELS; index++) {
         if (constant_eq_1) {
             if (constant_color_index == 8) { //white
-                led_colors[index][0]=255;
-                led_colors[index][1]=255;
-                led_colors[index][2]=255;
+                memset(&led_colors[index], 255, 3);
+                //led_colors[index][0]=255;
+                //led_colors[index][1]=255;
+                //led_colors[index][2]=255;
             } else {
                 hue_to_compute = (256/8) * constant_color_index;
                 hsv2rgb_rainbow(hue_to_compute, led_colors[index]);
