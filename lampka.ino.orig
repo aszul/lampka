@@ -128,7 +128,7 @@ inline void ledsetup() {
   
 }
 
-void sendPixel(uint8_t rgb[3])  {  
+void sendPixel( const uint8_t rgb[3] )  {  
   
   sendByte(rgb[0]);
   sendByte(rgb[1]);
@@ -146,7 +146,6 @@ void show() {
 
 
 ////////////////////////////////////////////////////////////////////////////////////
-#define FORCE_REFERENCE(var)  asm volatile( "" : : "r" (var) )
 #define K255 255
 #define K171 171
 #define K85  85
@@ -346,21 +345,24 @@ void hsv2rgb_rainbow(uint8_t hue, uint8_t colors[3])
 
 ////////////////////////////////////////////////////////////////////////////////////
 
-const uint8_t directionButtonPin=3;
-const uint8_t constantButtonPin=0;
 
 inline void interruptSetup() {
+    const uint8_t directionButtonPin=3;
+    const uint8_t constantButtonPin=0;
     // initialize the pushbutton pin as an input:
-    DDRB |= _BV(constantButtonPin);
-    DDRB |= _BV(directionButtonPin);
+    // actually they are all inputs by default, so do nothing
+    //DDRB |= _BV(buttonPin);
     
-    // enable pull-up resistor
-    PORTB |= _BV(constantButtonPin);    
-    PORTB |= _BV(directionButtonPin);    
-
+    //looks like it's 0 by default
+    //MCUCR = 0; //The low level of INT0 generates an interrupt request.
+    //MCUCR = 1; //Any logical change on INT0 generates an interrupt request.
+    //MCUCR = 2; //The falling edge of INT0 generates an interrupt request.
+    //MCUCR = 3; //The rising edge of INT0 generates an interrupt request.
+    
+    //GIMSK |= (1<<6); //Bit 6 INT0: External Interrupt Request 0 Enable
+    GIMSK |= (1<<5); //Bit 5 PCIE: Pin Change Interrupt Enable
     PCMSK |= (1<<directionButtonPin); //PCINT[5:0]: Pin Change Enable Mask 5:0
     PCMSK |= (1<<constantButtonPin); //PCINT[5:0]: Pin Change Enable Mask 5:0
-    GIMSK |= (1<<PCIE); //Bit 5 PCIE: Pin Change Interrupt Enable
 }
 
 void setup() {
@@ -378,13 +380,13 @@ uint8_t current_hue=0;
 
 ISR(PCINT0_vect) {
     cli();
-    if ((PINB & _BV(directionButtonPin)) == 0) { //change direction
+    if (PINB & (1<<3)) { //change direction
         constant = 0;
         direction += 2;
         direction = direction % 3;
         direction -= 1;
     }
-    if ((PINB & _BV(constantButtonPin)) == 0) { //constant color
+    if (PINB & 1) { //constant color
         constant = 1;
         constant_color_index++;
         constant_color_index = constant_color_index % 9; //8 is white
@@ -427,5 +429,5 @@ void loop() {
     }
     current_hue++;
     show_all_led_colors();
-    delay(100);
+    delay(20);
 }
