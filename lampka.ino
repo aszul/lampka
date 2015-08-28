@@ -93,9 +93,11 @@ void sendBit( bool bitVal ) {
     // Note that the inter-bit gap can be as long as you want as long as it doesn't exceed the 5us reset timeout (which is A long time)
     // Here I have been generous and not tried to squeeze the gap tight but instead erred on the side of lots of extra time.
     // This has thenice side effect of avoid glitches on very long strings becuase 
+
+    
 }  
 
- 
+  
 void sendByte( uint8_t byte ) {
     
     for( uint8_t bit = 0 ; bit < 8 ; bit++ ) {
@@ -139,20 +141,8 @@ void sendPixel( const uint8_t rgb[3] )  {
 
 void show() {
   //_delay_us( (RES / 1000UL) + 1);       // Round up since the delay must be _at_least_ this long (too short might not work, too long not a problem)
- //delayMicroseconds((RES / 1000UL) + 1);
- asm volatile (
-      ".rept %[innerCycles] \n\t"        // Now timing actually matters. The 0-bit must be long enough to be detected but not too long or it will be a 1-bit
-      "nop \n\t"                                              // Execute NOPs to delay exactly the specified number of cycles
-      ".endr \n\t"
-//      ".rept %[innerCycles] \n\t"        // Now timing actually matters. The 0-bit must be long enough to be detected but not too long or it will be a 1-bit
-      //"nop \n\t"                                              // Execute NOPs to delay exactly the specified number of cycles
-      //".endr \n\t"
-      ::
-      [innerCycles]  "I" (NS_TO_CYCLES(6000))
-      //[outerCycles]  "I" (100)
-    );
+ delayMicroseconds((RES / 1000UL) + 1);
 }
-
 
 
 ////////////////////////////////////////////////////////////////////////////////////
@@ -373,9 +363,6 @@ inline void interruptSetup() {
     GIMSK |= (1<<5); //Bit 5 PCIE: Pin Change Interrupt Enable
     PCMSK |= (1<<directionButtonPin); //PCINT[5:0]: Pin Change Enable Mask 5:0
     PCMSK |= (1<<constantButtonPin); //PCINT[5:0]: Pin Change Enable Mask 5:0
-    
-
-    TCCR0B &= ~(1 | 2| 4); //0 0 0 No clock source (Timer/Counter stopped)
 }
 
 #define constant_color_index OCR0B
