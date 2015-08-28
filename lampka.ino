@@ -7,7 +7,7 @@
 
 // Change this to be at least as long as your pixel string (too long will work fine, just be a little slower)
 
-#define PIXELS 14  // Number of pixels in the string
+#define PIXELS 12  // Number of pixels in the string
 
 // These values depend on which pin your string is connected to and what board you are using 
 // More info on how to find these at http://www.arduino.cc/en/Reference/PortManipulation
@@ -365,27 +365,17 @@ inline void interruptSetup() {
     PCMSK |= (1<<constantButtonPin); //PCINT[5:0]: Pin Change Enable Mask 5:0
 }
 
-#define constant_color_index OCR0B
-#define direction OCR0A
-#define set_constant_1 DDRB |= (1<<2)
-#define set_constant_0 DDRB &= ~(1<<2)
-#define constant_eq_1 DDRB & (1<<2)
-#define current_hue EEDR
-
 void setup() {
     interruptSetup();
     ledsetup();
-    direction = 1;
-    constant_color_index = 0;
-    set_constant_0;
 }
 
 const uint8_t delta = (256/PIXELS); //delta of hue between each pixel, spread out evenly
-//boolean constant=0;
-//int8_t direction = 1;
+boolean constant=0;
+int8_t direction = 1;
 uint8_t led_colors[PIXELS][3];
-//uint8_t constant_color_index=0;
-//uint8_t current_hue=0;
+uint8_t constant_color_index=0;
+uint8_t current_hue=0;
 
 ISR(PCINT0_vect) {
     cli();
@@ -397,9 +387,7 @@ ISR(PCINT0_vect) {
         direction -= 1;
     }
     if (PINB & 1) { //constant color
-        set_constant_1;
-        //DDRB |= (1<<2); //constant=1
-        
+        DDRB |= (1<<2); //constant=1
         constant_color_index++;
         constant_color_index = constant_color_index % 9; //8 is white
     }
@@ -423,7 +411,7 @@ void loop() {
     clear_led_colors();
     uint8_t hue_to_compute = 0;
     for (uint8_t index=0; index < PIXELS; index++) {
-        if (constant_eq_1) {
+        if (DDRB & (1<<2)) {
             if (constant_color_index == 8) { //white
                 led_colors[index][0]=255;
                 led_colors[index][1]=255;
