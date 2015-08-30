@@ -146,7 +146,6 @@ void show() {
 
 
 ////////////////////////////////////////////////////////////////////////////////////
-#define FORCE_REFERENCE(var)  asm volatile( "" : : "r" (var) )
 #define K255 255
 #define K171 171
 #define K85  85
@@ -197,31 +196,6 @@ static inline uint8_t scale8( uint8_t i, uint8_t scale)
 #endif
 }
 
-static inline uint8_t scale8_video_LEAVING_R1_DIRTY( uint8_t i, uint8_t scale)
-{
-#if SCALE8_C == 1 || defined(LIB8_ATTINY)
-    uint8_t j = (((int)i * (int)scale) >> 8) + ((i&&scale)?1:0);
-    return j;
-#elif SCALE8_AVRASM == 1
-    uint8_t j=0;
-    asm volatile(
-        "  tst %[i]\n\t"
-        "  breq L_%=\n\t"
-        "  mul %[i], %[scale]\n\t"
-        "  mov %[j], r1\n\t"
-        "  breq L_%=\n\t"
-        "  subi %[j], 0xFF\n\t"
-        "L_%=: \n\t"
-        : [j] "+a" (j)
-        : [i] "a" (i), [scale] "a" (scale)
-        : "r0", "r1");
-
-    return j;
-#else
-#error "No implementation for scale8_video_LEAVING_R1_DIRTY available."
-#endif
-} 
-
 void hsv2rgb_rainbow(uint8_t hue, uint8_t colors[3])
 {
     // Yellow has a higher inherent brightness than
@@ -234,14 +208,6 @@ void hsv2rgb_rainbow(uint8_t hue, uint8_t colors[3])
     // Level Y2 is a strong boost.
     const uint8_t Y1 = 1;
     const uint8_t Y2 = 0;
-
-    // G2: Whether to divide all greens by two.
-    // Depends GREATLY on your particular LEDs
-    const uint8_t G2 = 0;
-    
-    // Gscale: what to scale green down by.
-    // Depends GREATLY on your particular LEDs
-    const uint8_t Gscale = 0;
 
     uint8_t offset = hue & 0x1F; // 0..31
     
@@ -337,11 +303,6 @@ void hsv2rgb_rainbow(uint8_t hue, uint8_t colors[3])
             }
         }
     }
-    
-    // This is one of the good places to scale the green down,
-    // although the client can scale green down as well.
-    if( G2 ) colors[1] = colors[1] >> 1;
-    if( Gscale ) colors[1] = scale8_video_LEAVING_R1_DIRTY( colors[1], Gscale);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////
