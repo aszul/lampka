@@ -97,15 +97,11 @@ void sendBit( bool bitVal ) {
     
 }  
 
-  
 void sendByte( uint8_t byte ) {
-    
     for( uint8_t bit = 0 ; bit < 8 ; bit++ ) {
-      
       sendBit( bitRead( byte , 7 ) );                // Neopixel wants bit in highest-to-lowest order
                                                      // so send highest bit (bit #7 in an 8-bit byte since they start at 0)
       byte <<= 1;                                    // and then shift left so bit 6 moves into 7, 5 moves into 6, etc
-      
     }           
 } 
 
@@ -128,20 +124,21 @@ inline void ledsetup() {
   
 }
 
-void sendPixel(uint8_t rgb[3])  {  
+void sendPixel(uint8_t rgb[3])  {
   
+  /*for (uint8_t index=0; index < 3; index++) {
+    sendByte(rgb[index]);
+  }*/
   sendByte(rgb[0]);
   sendByte(rgb[1]);
   sendByte(rgb[2]);
-  
 }
 
 
 // Just wait long enough without sending any bots to cause the pixels to latch and display the last sent frame
 
 void show() {
-  //_delay_us( (RES / 1000UL) + 1);       // Round up since the delay must be _at_least_ this long (too short might not work, too long not a problem)
- delayMicroseconds((RES / 1000UL) + 1);
+ delayMicroseconds((RES / 1000UL) + 1);// Round up since the delay must be _at_least_ this long (too short might not work, too long not a problem)
 }
 
 
@@ -153,7 +150,7 @@ void show() {
 //#define SCALE8_C 1
 #define SCALE8_AVRASM 1
 #define LIB8_ATTINY
-static inline uint8_t scale8( uint8_t i, uint8_t scale)
+static uint8_t scale8( uint8_t i, uint8_t scale)
 {
 #if SCALE8_C == 1
     return
@@ -206,12 +203,13 @@ void hsv2rgb_rainbow(uint8_t hue, uint8_t colors[3])
     // colors.
     // Level Y1 is a moderate boost, the default.
     // Level Y2 is a strong boost.
-    const uint8_t Y1 = 1;
-    const uint8_t Y2 = 0;
+    const uint8_t Y1 = 0;
+    const uint8_t Y2 = 1;
 
     uint8_t offset = hue & 0x1F; // 0..31
     
     // offset8 = offset * 8
+    /*
     uint8_t offset8 = offset;
     {
         offset8 <<= 1;
@@ -219,9 +217,12 @@ void hsv2rgb_rainbow(uint8_t hue, uint8_t colors[3])
         offset8 <<= 1;
         asm volatile("");
         offset8 <<= 1;
-    }
+    }*/
+    uint8_t offset8 = offset << 3;
     
-    uint8_t third = scale8( offset8, (256 / 3));
+    //uint8_t third = scale8( offset8, (256 / 3));
+    uint8_t third = offset8 / 3;
+    uint8_t twothirds = (third << 1);
         
     memset(colors, 0, sizeof(colors));
     
@@ -245,7 +246,7 @@ void hsv2rgb_rainbow(uint8_t hue, uint8_t colors[3])
                 if( Y2 ) {
                     colors[0] = K171 + third;
                     //uint8_t twothirds = (third << 1);
-                    uint8_t twothirds = scale8( offset8, ((256 * 2) / 3));
+                    //uint8_t twothirds = scale8( offset8, ((256 * 2) / 3));
                     colors[1] = K85 + twothirds;
                 }
             }
@@ -256,7 +257,8 @@ void hsv2rgb_rainbow(uint8_t hue, uint8_t colors[3])
                 // 010
                 //case 2: // Y -> G
                 if( Y1 ) {
-                    uint8_t twothirds = scale8( offset8, ((256 * 2) / 3));
+                    
+                    //uint8_t twothirds = scale8( offset8, ((256 * 2) / 3));
                     colors[0] = K171 - twothirds;
                     colors[1] = K171 + third;
                 }
@@ -280,7 +282,8 @@ void hsv2rgb_rainbow(uint8_t hue, uint8_t colors[3])
                 // 100
                 //case 4: // A -> B
                 //r = 0;
-                uint8_t twothirds = scale8( offset8, ((256 * 2) / 3));
+                //uint8_t twothirds = (third << 1);
+                //uint8_t twothirds = scale8( offset8, ((256 * 2) / 3));
                 colors[1] = K171 - twothirds;
                 colors[2] = K85  + twothirds;
             } else {
@@ -324,26 +327,47 @@ inline void interruptSetup() {
     GIMSK |= (1<<PCIE); //Bit 5 PCIE: Pin Change Interrupt Enable
 }
 
-void setup() {
-    interruptSetup();
-    ledsetup();
+
+inline void timerSetup() {
+    //Clock Select clk I/O /1024 (From prescaler)
+    //TCCR0B |= _BV(CS02) | _BV(CS00);
+    TCCR0B |= _BV(CS02);
+    //CTC mode
+    //TCCR0A |= _BV(WGM01);
+    
+    //Output Compare Register A
+    //OCR0A = 0xFF;
+
+    //OCIE0A: Timer/Counter0 Output Compare Match A Interrupt Enable
+    //TIMSK0 |= _BV(OCIE0A);
+    TIMSK0 |= _BV(TOIE0);
+}
+void init() {
 }
 
+const uint8_t eeprom_address = 0;
 const uint8_t delta = (256/PIXELS); //delta of hue between each pixel, spread out evenly
-boolean constant=0;
-int8_t direction = 1;
+volatile boolean constant=0;
+volatile uint8_t direction = 0;
 uint8_t constant_color_hue=0;
 uint8_t led_colors[PIXELS][3];
 uint8_t constant_color_index=0;
 uint8_t current_hue=0;
+uint8_t timer_counter=0;
+uint8_t timer_counter2=0;
 
 ISR(PCINT0_vect) {
     cli();
+    timer_counter=0;
+    timer_counter2=0;
     if ((PINB & _BV(directionButtonPin)) == 0) { //change direction
         constant = 0;
-        direction += 2;
+        direction++;
         direction = direction % 3;
-        direction -= 1;
+        /*direction += 2;
+        direction = direction % 3;
+        direction -= 1;*/
+        
     }
     if ((PINB & _BV(constantButtonPin)) == 0) { //constant color
         constant = 1;
@@ -353,8 +377,98 @@ ISR(PCINT0_vect) {
     sei();
 }
 
-void clear_led_colors() {
+inline void set_all_white() {
+    memset(led_colors, 255, sizeof(led_colors));
+}
+
+inline void clear_led_colors() {
     memset(led_colors, 0, sizeof(led_colors));
+}
+
+
+void set_into_EEDR() {
+    /* set EEDR register with values from direction and constant */
+    EEDR = get_mode();
+}
+
+uint8_t get_mode() {
+    /* convert direction and constant into an 8 bit flag byte
+    bits are mapped as follows:
+    CIIII_DD
+    C = constant
+    I = constant_color_index
+    D = direction
+    */
+    uint8_t mode = direction & 3;
+    mode |= constant_color_index << 3;
+    mode |= constant << 7;
+    return mode;
+}
+
+void get_from_EEDR() {
+    /* get values from EEDR and put into direction, constant nd constant_color_index 
+    bits are mapped as follows:
+    CIIII_DD
+    C = constant
+    I = constant_color_index
+    D = direction
+    */
+    direction = EEDR & 3;
+    constant_color_index = (EEDR & 0b01111000) >> 3;
+    constant = EEDR >> 7;
+}
+
+ISR(TIM0_OVF_vect) {
+    cli();
+    // 255 ~ 8.5s
+    // 255*60 = 8 minutes
+    // 255*120 = 16 minutes
+    // 255*240 = 32 minutes
+    // 255*255 = 35 minutes
+    if (++timer_counter == 0) {
+        timer_counter2++;
+        if (timer_counter2 > 250) {
+            timer_counter2 = 0;
+            //EEPROM_read();
+            uint8_t mode = get_mode();
+            if (mode != EEDR) {
+                set_into_EEDR();
+                //set_all_white();
+                //show_all_led_colors();
+                //delay(300);
+                
+                EEPROM_write();
+                //delay(1000);
+            }
+        }
+    }
+    sei();
+}
+
+
+void EEPROM_write()
+{
+    /* Wait for completion of previous write */
+    while(EECR & (1<<EEPE));
+    /* Set Programming mode */
+    EECR = (0<<EEPM1)|(0>>EEPM0);
+    /* Set up address and data registers */
+    EEARL = eeprom_address;
+    /* Write logical one to EEMPE */
+    EECR |= (1<<EEMPE);
+    /* Start eeprom write by setting EEPE */
+    EECR |= (1<<EEPE);
+}
+
+void EEPROM_read()
+{
+    /* Wait for completion of previous write */
+    while(EECR & (1<<EEPE));
+    /* Set up address register */
+    EEARL = eeprom_address;
+    /* Start eeprom read by writing EERE */
+    EECR |= (1<<EERE);
+    /* Return data from data register */
 }
 
 void show_all_led_colors() {
@@ -366,8 +480,21 @@ void show_all_led_colors() {
     sei();
 }
 
+void setup() {
+    cli();
+    interruptSetup();
+    ledsetup();
+    timerSetup();
+    EEPROM_read();
+    if (EEDR != 255) {
+        get_from_EEDR();
+    }
+    sei();
+}
+
 void loop() {
     clear_led_colors();
+    //set_all_white();
     uint8_t hue_to_compute = 0;
     for (uint8_t index=0; index < PIXELS; index++) {
         if (constant) {
@@ -376,15 +503,15 @@ void loop() {
                 led_colors[index][1]=255;
                 led_colors[index][2]=255;
             } else {
+            //if (constant_color_index != 8) { //not white
                 hue_to_compute = (256/8) * constant_color_index;
                 hsv2rgb_rainbow(hue_to_compute, led_colors[index]);
             }
         } else {
-            uint8_t offset = index * delta * direction;
+            uint8_t offset = index * delta * (direction-1);
             hue_to_compute = current_hue + offset;
             hsv2rgb_rainbow(hue_to_compute, led_colors[index]);
         }
-        
     }
     current_hue++;
     show_all_led_colors();
